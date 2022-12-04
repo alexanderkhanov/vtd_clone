@@ -49,7 +49,16 @@ const nCells = nCellsX*nCellsY;
 gameBoardCells = "xooxxxxxxxxxxxxxxxxxxxxooxxxxxxxxxxxxxxxxxxxxooooooooooooooooooooxxooooooooooooooooooooxxxxxxxxxxxxxxxxxxxxooxxooooooooooooooxxxxooxxooooooooooooooxxxxooxxooxxxxxxxxxxooxxxxooxxoooooooooooxooooooooxxoooooooooooxooooooooxxxxxxxxxxxooxxxxxxxxxxxoooooooooooxooooooxxxxoooooooooooxooooooxxxxooxxxxxxxxxxooxxooxxxxooooooooooooooxxooxxxxooooooooooooooxxoooooxxxxxxxxxxxxxxxxxoooooxxxxxxxxxxxxxxxxxxxxxx";
 editMode = 0;
 
+// money stuff
+const startingCapital = 250;
+bank = startingCapital;
+
 const nRowsInWave = 14;
+const startingStrength = 500;
+vectoidStrength = startingStrength;
+const vectoidPrice = 0.02;
+const startingLives = 20;
+lives = startingLives;
 
 buttons = [];
 vectoids = [];
@@ -105,6 +114,10 @@ function resetGameBoard() {
 
   selectedTower = 0;
   vectoidLauncher = 0;
+
+  vectoidStrength = startingStrength;
+  bank = startingCapital;
+  lives = startingLives;
 }
 
 function paintGameBoard() {
@@ -169,14 +182,20 @@ class button {
       } else if (this.action=="reset") {
 	resetGameBoard();
       } else if (this.action=="sell") {
+	bank += selectedTower.priceToSell;
 	// remove the tower from the list
 	towers.splice(towers.indexOf(selectedTower),1);
 	selectedTower = null;
       } else if (this.action=="upgrade") {
-	if (selectedTower.level<10) selectedTower.level++;
+	if (selectedTower.level<10 && bank>=selectedTower.priceToUpgrade) {
+	  bank -= selectedTower.priceToUpgrade;
+	  selectedTower.level++;
+	}
       } else if (this.action=="send") {
 	if (vectoidLauncher==0) {
 	  vectoidLauncher = nRowsInWave*cellHeight;
+	  vectoidStrength = Math.floor(vectoidStrength*1.1);
+	  bank = Math.floor(bank*1.03);
 	}
       }
     } else if (this.lockable==0) {
@@ -197,6 +216,8 @@ class button {
     context.fillStyle = whiteColor;
     context.fillText(this.action,this.x+this.w/2,this.y+this.h-2);
   }
+
+  // text info
 }
 
 function destroyClickedElement(event)
@@ -227,7 +248,7 @@ class vectoid {
     this.color = colorSelector(vectoidType);
 
     this.health = cellWidth/2-1;
-    this.resistance = 550;
+    this.strength = vectoidStrength;
 
     this.pause = 0;
   }
@@ -246,6 +267,7 @@ class vectoid {
 	  this.y = this.initial_y;
 	  this.vx = this.initial_vx;
 	  this.vy = this.initial_vy;
+	  lives--;
 	  return;
 	}
 	// can I move forward?
@@ -306,11 +328,18 @@ class tower {
     this.enemies = [];
     this.maxEnemies = 1;
 
-    this.radius = function() { return 1.7*this.level + 65; }
-    this.power = function() { return 12 + 10*this.level; }
+    // default parameters, maybe overridden by specific tower types
+    this.R0 = 67; this.dR = 3;
+    this.radius = function() { return this.dR*this.level + this.R0; }
+    this.P0 = 66; this.dP = 10;
+    this.power = function() { return this.dP*this.level + this.P0; }
 
     this.maxCharge = 64;
     this.charge = this.maxCharge;
+
+    this.priceToBuy = 100;
+    this.priceToSell = 50;
+    this.priceToUpgrade = 50;
   }
 
   update() {
@@ -394,8 +423,9 @@ class tower {
       let strike = this.attackThis(enemy);
       if (strike>0) {
 	// damage enemy's health
-	if ((enemy.health-=strike/enemy.resistance)<3) {
+	if ((enemy.health-=strike/enemy.strength)<3) {
 	  // the enemy is dead
+	  bank += Math.floor(enemy.strength*vectoidPrice);
 	  vectoids.splice(vectoids.indexOf(enemy),1);
 	  this.enemies.splice(i,1);
 	}
@@ -445,6 +475,12 @@ class redTower extends tower {
   constructor(x, y) {
     super(x, y, 1);
     super.maxEnemies = 4;
+
+    super.R0 = 143; super.dR = 7;
+
+    super.priceToBuy = 2500;
+    super.priceToSell = 1250;
+    super.priceToUpgrade = 1250;
   }
 
   lockThis(enemy) {
@@ -458,6 +494,12 @@ class purpleTower extends tower {
     super(x, y, 2);
     this.lockedEnemy = null;
     this.loadedCharge = 0;
+
+    super.R0 = 95; super.dR = 5;
+
+    super.priceToBuy = 300;
+    super.priceToSell = 150;
+    super.priceToUpgrade = 150;
   }
 
   attackThis(enemy) {
@@ -498,6 +540,10 @@ class blueTower extends tower {
 
   constructor(x, y) {
     super(x, y, 3);
+
+    super.priceToBuy = 300;
+    super.priceToSell = 150;
+    super.priceToUpgrade = 150;
   }
 
   attackThis(enemy) {
@@ -559,8 +605,9 @@ class projectile {
     if (distance<dstep+1) {
       // target is hit
       let strike = 8*this.tower.power();
-      if ((this.target.health-=strike/this.target.resistance)<3) {
+      if ((this.target.health-=strike/this.target.strength)<3) {
 	// the enemy is dead
+	bank += Math.floor(this.target.strength*vectoidPrice);
 	vectoids.splice(vectoids.indexOf(this.target),1);
       }
       if (this.tower.enemies.includes(this.target)) {
@@ -629,26 +676,29 @@ function updateGameArea() {
     if (!selectedTower.isActive
 	&& offsetX<=myGameArea.x && myGameArea.x<=offsetX+nCellsX*cellWidth
 	&& offsetY<=myGameArea.y && myGameArea.y<=offsetY+nCellsY*cellHeight) {
-      let i = Math.floor((myGameArea.x-offsetX)/cellWidth);
-      let j = Math.floor((myGameArea.y-offsetY)/cellHeight);
-      let k = j*nCellsX + i;
-      if (gameBoardCells[k]=="x") {
-	// yes, place a new tower
-	selectedTower.selected = 0;
-	selectedTower.draw();
-	let xt = offsetX + i*cellWidth;
-	let yt = offsetY+j*cellHeight;
-	let newTower = null;
-	// cloning objects in (older) JS is not trivial, so a hack here..
-	switch (selectedTower.towerType) {
-	  case 0: newTower = new  greenTower(xt,yt); break;
-	  case 1: newTower = new    redTower(xt,yt); break;
-	  case 2: newTower = new purpleTower(xt,yt); break;
-	  case 3: newTower = new   blueTower(xt,yt); break;
+      if (bank>=selectedTower.priceToBuy) {
+	bank -= selectedTower.priceToBuy;
+	let i = Math.floor((myGameArea.x-offsetX)/cellWidth);
+	let j = Math.floor((myGameArea.y-offsetY)/cellHeight);
+	let k = j*nCellsX + i;
+	if (gameBoardCells[k]=="x") {
+	  // yes, place a new tower
+	  selectedTower.selected = 0;
+	  selectedTower.draw();
+	  let xt = offsetX + i*cellWidth;
+	  let yt = offsetY+j*cellHeight;
+	  let newTower = null;
+	  // cloning objects in (older) JS is not trivial, so a hack here..
+	  switch (selectedTower.towerType) {
+	    case 0: newTower = new  greenTower(xt,yt); break;
+	    case 1: newTower = new    redTower(xt,yt); break;
+	    case 2: newTower = new purpleTower(xt,yt); break;
+	    case 3: newTower = new   blueTower(xt,yt); break;
+	  }
+	  newTower.isActive = true;
+	  newTower.draw();
+	  towers.push(newTower);
 	}
-	newTower.isActive = true;
-	newTower.draw();
-	towers.push(newTower);
       }
     } else {
       // reset selected tower
@@ -656,6 +706,41 @@ function updateGameArea() {
 	selectedTower.selected = 0;
 	selectedTower.draw();
       selectedTower = null;
+      }
+    }
+  }
+
+  // show information
+  let context = myGameArea.context;
+  let xt = 560;
+  let yt = 130;
+  context.font = "14px Arial";
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillStyle = blackColor;
+  context.fillText("lives: "+lives.toString(), xt, yt);
+  yt += 20;
+  context.fillText("bank: "+bank.toString(), xt, yt);
+  if (selectedTower) {
+    if (!selectedTower.isActive) {
+      yt += 20;
+      if (bank>=selectedTower.priceToBuy) {
+	context.fillStyle = blackColor;
+      } else {
+	context.fillStyle = brightColor;
+      }
+      context.fillText("buy: "+selectedTower.priceToBuy.toString(), xt, yt);
+    } else {
+      yt += 20;
+      context.fillText("sell: "+selectedTower.priceToSell.toString(), xt, yt);
+      if (selectedTower.level<10) {
+	yt += 20;
+	if (bank>=selectedTower.priceToUpgrade) {
+	  context.fillStyle = blackColor;
+	} else {
+	  context.fillStyle = brightColor;
+	}
+	context.fillText("upgrade: "+selectedTower.priceToUpgrade.toString(), xt, yt);
       }
     }
   }
