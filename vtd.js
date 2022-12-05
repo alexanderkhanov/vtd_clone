@@ -398,8 +398,6 @@ class tower {
       context.stroke();
     }
 
-    if (this.enemies.length>0) this.attack();
-
     if (this.isActive) {
       context.font = "10px Arial";
       context.textAlign = "left";
@@ -654,6 +652,10 @@ function updateGameArea() {
 
   for (let i = 0; i<towers.length; i++) {
     towers[i].update();
+  }
+
+  for (let i = 0; i<towers.length; i++) {
+    towers[i].attack();
   }
 
   for (let i = 0; i<projectiles.length; i++) {
