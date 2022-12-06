@@ -41,11 +41,12 @@ const startingCapital = 250;
 bank = startingCapital;
 
 const nRowsInWave = 14;
-const startingStrength = 500;
+const startingStrength = 300;
 vectoidStrength = startingStrength;
 const vectoidPrice = 0.02;
 const startingLives = 20;
 lives = startingLives;
+waveCount = 0;
 
 buttons = [];
 vectoids = [];
@@ -105,6 +106,7 @@ function resetGameBoard() {
   vectoidStrength = startingStrength;
   bank = startingCapital;
   lives = startingLives;
+  waveCount = 0;
 }
 
 function paintGameBoard() {
@@ -169,7 +171,7 @@ class button {
       } else if (this.action=="reset") {
 	resetGameBoard();
       } else if (this.action=="sell") {
-	bank += selectedTower.priceToSell;
+	bank += selectedTower.priceToSell();
 	// remove the tower from the list
 	towers.splice(towers.indexOf(selectedTower),1);
 	selectedTower = null;
@@ -181,8 +183,9 @@ class button {
       } else if (this.action=="send") {
 	if (vectoidLauncher==0) {
 	  vectoidLauncher = nRowsInWave*cellHeight;
-	  vectoidStrength = Math.floor(vectoidStrength*1.1);
+	  vectoidStrength = Math.floor(vectoidStrength*1.2);
 	  bank = Math.floor(bank*1.03);
+	  ++waveCount;
 	}
       }
     } else if (this.lockable==0) {
@@ -254,7 +257,10 @@ class vectoid {
 	  this.y = this.initial_y;
 	  this.vx = this.initial_vx;
 	  this.vy = this.initial_vy;
-	  lives--;
+	  if (--lives<=0) {
+	    alert("Game over");
+	    resetGameBoard();
+	  }
 	  return;
 	}
 	// can I move forward?
@@ -316,17 +322,17 @@ class tower {
     this.maxEnemies = 1;
 
     // default parameters, maybe overridden by specific tower types
-    this.R0 = 67; this.dR = 3;
+    this.R0 = 67; this.dR = 1.7;
     this.radius = function() { return this.dR*this.level + this.R0; }
-    this.P0 = 66; this.dP = 10;
+    this.P0 = 100; this.dP = 6;
     this.power = function() { return this.dP*this.level + this.P0; }
 
     this.maxCharge = 64;
     this.charge = this.maxCharge;
 
     this.priceToBuy = 100;
-    this.priceToSell = 50;
     this.priceToUpgrade = 50;
+    this.priceToSell = function() { return 0.5*(this.priceToBuy + (this.level-1)*this.priceToUpgrade); }
   }
 
   update() {
@@ -469,7 +475,6 @@ class redTower extends tower {
     super.R0 = 143; super.dR = 7;
 
     super.priceToBuy = 2500;
-    super.priceToSell = 1250;
     super.priceToUpgrade = 1250;
   }
 
@@ -488,7 +493,6 @@ class purpleTower extends tower {
     super.R0 = 95; super.dR = 5;
 
     super.priceToBuy = 300;
-    super.priceToSell = 150;
     super.priceToUpgrade = 150;
   }
 
@@ -532,7 +536,6 @@ class blueTower extends tower {
     super(x, y, 3);
 
     super.priceToBuy = 300;
-    super.priceToSell = 150;
     super.priceToUpgrade = 150;
   }
 
@@ -712,6 +715,12 @@ function updateGameArea() {
   context.textAlign = "left";
   context.textBaseline = "top";
   context.fillStyle = blackColor;
+  if (waveCount==0) {
+    context.fillText("ready", xt, yt);
+  } else {
+    context.fillText("wave: "+waveCount.toString(), xt, yt);
+  }
+  yt += 20;
   context.fillText("lives: "+lives.toString(), xt, yt);
   yt += 20;
   context.fillText("bank: "+bank.toString(), xt, yt);
@@ -726,7 +735,7 @@ function updateGameArea() {
       context.fillText("buy: "+selectedTower.priceToBuy.toString(), xt, yt);
     } else {
       yt += 20;
-      context.fillText("sell: "+selectedTower.priceToSell.toString(), xt, yt);
+      context.fillText("sell: "+selectedTower.priceToSell().toString(), xt, yt);
       if (selectedTower.level<10) {
 	yt += 20;
 	if (bank>=selectedTower.priceToUpgrade) {
