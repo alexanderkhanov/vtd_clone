@@ -1,3 +1,3 @@
-# vtd_clone
+# Vector Tower Defence clone
 
-This is a simple version of Vector Tower Defence game.
+[Click on the image to play.](g.html)
