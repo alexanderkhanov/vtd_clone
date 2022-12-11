@@ -48,6 +48,9 @@ const startingLives = 20;
 lives = startingLives;
 waveCount = 0;
 
+// fast forward option
+nloops = 1;
+
 buttons = [];
 vectoids = [];
 towers = [];
@@ -87,6 +90,7 @@ function createGameBoard() {
   buttons.push(new button( 20,456,darkColor,brightColor,1,"edit"));
   buttons.push(new button( 80,456,darkColor,brightColor,0,"save"));
   buttons.push(new button(140,456,darkColor,brightColor,0,"reset"));
+  buttons.push(new button(404,456,darkColor,brightColor,0,"f.fwd"));
   buttons.push(new button(474,456,darkColor,brightColor,0,"send"));
   buttons.push(new button(560, 80,darkColor,brightColor,0,"sell"));
   buttons.push(new button(620, 80,darkColor,brightColor,0,"upgrade"));
@@ -107,6 +111,8 @@ function resetGameBoard() {
   bank = startingCapital;
   lives = startingLives;
   waveCount = 0;
+
+  nloops = 1;
 }
 
 function paintGameBoard() {
@@ -143,6 +149,10 @@ class button {
   update() {
     // special buttons only shown if an active tower is selected
     if ((this.action=="sell" || this.action=="upgrade") && !(selectedTower && selectedTower.isActive)) {
+      return;
+    }
+    // special buttons only available if vectoids are present
+    if (this.action=="f.fwd" && vectoids.length==0) {
       return;
     }
     if (myGameArea.mouseEvent==1
@@ -187,6 +197,8 @@ class button {
 	  bank = Math.floor(bank*1.03);
 	  ++waveCount;
 	}
+      } else if (this.action=="f.fwd") {
+	nloops = 5;
       }
     } else if (this.lockable==0) {
       this.state = 0;
@@ -323,9 +335,9 @@ class tower {
 
     // default parameters, maybe overridden by specific tower types
     this.R0 = 67; this.dR = 1.7;
-    this.radius = function() { return this.dR*this.level + this.R0; }
-    this.P0 = 100; this.dP = 6;
-    this.power = function() { return this.dP*this.level + this.P0; }
+    this.radius = function() { return this.dR*(this.level-1) + this.R0; }
+    this.P0 = 50; this.dP = 6;
+    this.power = function() { return this.dP*(this.level-1) + this.P0; }
 
     this.maxCharge = 64;
     this.charge = this.maxCharge;
@@ -643,30 +655,37 @@ function updateGameArea() {
   if (editMode==1) editGameBoard();
   paintGameBoard();
 
-  launchVectoids();
+  // for fast forward mode, nloops>1
+  for (var iloop = 0; iloop<nloops; ++iloop) {
 
-  for (let i = 0; i<buttons.length; i++) {
-    buttons[i].update();
+    launchVectoids();
+
+    for (let i = 0; i<buttons.length; i++) {
+      buttons[i].update();
+    }
+
+    for (let i = 0; i<vectoids.length; i++) {
+      vectoids[i].update();
+    }
+
+    for (let i = 0; i<towers.length; i++) {
+      towers[i].update();
+    }
+
+    for (let i = 0; i<towers.length; i++) {
+      towers[i].attack();
+    }
+
+    for (let i = 0; i<projectiles.length; i++) {
+      projectiles[i].update();
+    }
+
+    // remove dead projectiles
+    projectiles = projectiles.filter(function(p) { return p.valid; });
+
   }
-
-  for (let i = 0; i<vectoids.length; i++) {
-    vectoids[i].update();
-  }
-
-  for (let i = 0; i<towers.length; i++) {
-    towers[i].update();
-  }
-
-  for (let i = 0; i<towers.length; i++) {
-    towers[i].attack();
-  }
-
-  for (let i = 0; i<projectiles.length; i++) {
-    projectiles[i].update();
-  }
-
-  // remove dead projectiles
-  projectiles = projectiles.filter(function(p) { return p.valid; });
+  // reset fast forward mode when all vectoids are dead
+  if (vectoids.length==0) nloops = 1;
 
   if (selectedTower && myGameArea.mouseEvent==1) {
     // check if the player wants to place a new tower
